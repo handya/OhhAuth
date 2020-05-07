@@ -91,7 +91,7 @@ public class OhhAuth
         /// [RFC-5849 Section 3.4.2](https://tools.ietf.org/html/rfc5849#section-3.4.2)
         let binarySignature = HMAC<Insecure.SHA1>.authenticationCode(for: signatureBaseData,
                                                                      using: .init(data: signingKeyData))
-        oAuthParameters["oauth_signature"] = binarySignature.base64EncodedString()
+        oAuthParameters["oauth_signature"] = Data(binarySignature).base64EncodedString()
         
         /// [RFC-5849 Section 3.5.1](https://tools.ietf.org/html/rfc5849#section-3.5.1)
         return "OAuth " + oAuthParameters
