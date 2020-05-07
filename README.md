@@ -5,8 +5,7 @@ Even though its successor is already specified, the OAuth 1.0 protocol is still 
 
 
 #### Requirements
-OhhAuth depends on `libCommonCrypto` which is already installed on all common Apple operating systems (macOS, iOS, tvOS, watchOS). Unfortunately Linux is not support at the moment, but is likely to be added in the near future.
-
+Updated OhhAuth depends on `swift-crypto` which is already installed on all common Apple operating systems (macOS 10.15, iOS 13, tvOS 13, watchOS 6). This also adds Linux support.
 
 ## Usage example
 
