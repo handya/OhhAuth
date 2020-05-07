@@ -22,6 +22,10 @@
 /// - Copyright: 2017
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+import Crypto
 
 public class OhhAuth
 {
@@ -41,7 +45,7 @@ public class OhhAuth
     ///   - userCredentials: user credentials (nil if this is a request without user association)
     ///
     /// - Returns: OAuth HTTP header entry for the Authorization field.
-    static func calculateSignature(url: URL, method: String, parameter: [String: String],
+    public static func calculateSignature(url: URL, method: String, parameter: [String: String],
         consumerCredentials cc: Credentials, userCredentials uc: Credentials?) -> String
     {
         typealias Tup = (key: String, value: String)
@@ -80,8 +84,13 @@ public class OhhAuth
             .map(rfc3986encode)
             .joined(separator: "&")
         
+        guard let signatureBaseData = signatureBase.data(using: .utf8),
+            let signingKeyData = signingKey.data(using: .utf8) else {
+            return ""
+        }
         /// [RFC-5849 Section 3.4.2](https://tools.ietf.org/html/rfc5849#section-3.4.2)
-        let binarySignature = HMAC.calculate(withHash: .sha1, key: signingKey, message: signatureBase)
+        let binarySignature = HMAC<Insecure.SHA1>.authenticationCode(for: signatureBaseData,
+                                                                     using: .init(data: signingKeyData))
         oAuthParameters["oauth_signature"] = binarySignature.base64EncodedString()
         
         /// [RFC-5849 Section 3.5.1](https://tools.ietf.org/html/rfc5849#section-3.5.1)
@@ -203,72 +212,6 @@ public extension URLRequest
     }
 }
 
-
-
-/// Hash-based message authentication helper class.
-fileprivate class HMAC
-{
-    enum HashMethod: UInt32
-    {
-        /// See <CommonCrypto/CommonHMAC.h>
-        case sha1, md5, sha256, sha384, sha512, sha224
-        
-        var length: Int {
-            switch self {
-                case .md5:     return 16
-                case .sha1:    return 20
-                case .sha224:  return 28
-                case .sha256:  return 32
-                case .sha384:  return 48
-                case .sha512:  return 64
-            }
-        }
-    }
-    
-    
-    /// Function to calculate a hash-based message authentication code (aka HMAC)
-    ///
-    /// - Parameters:
-    ///   - withHash: hash function used (one of: .sha1, .md5, .sha256, .sha384, .sha512, .sha224)
-    ///   - key: the key
-    ///   - message: the message
-    /// - Returns: the HMAC
-    static func calculate(withHash hash: HashMethod, key: String, message msg: String) -> Data
-    {
-        let mac = UnsafeMutablePointer<CUnsignedChar>.allocate(capacity: hash.length)
-        let keyLen = CUnsignedLong(key.lengthOfBytes(using: .utf8))
-        let msgLen = CUnsignedLong(msg.lengthOfBytes(using: .utf8))
-        hmac(hash.rawValue, key, keyLen, msg, msgLen, mac)
-        return Data(bytesNoCopy: mac, count: hash.length, deallocator: .free)
-    }
-    
-    
-    private static let hmac: CCHmacFuncPtr = loadHMACfromCommonCrypto()
-    
-    // see <CommonCrypto/CommonHMAC.h>
-    private typealias CCHmacFuncPtr = @convention(c) (
-        _ algorithm:  CUnsignedInt,
-        _ key:        UnsafePointer<CUnsignedChar>,
-        _ keyLength:  CUnsignedLong,
-        _ data:       UnsafePointer<CUnsignedChar>,
-        _ dataLength: CUnsignedLong,
-        _ macOut:     UnsafeMutablePointer<CUnsignedChar>
-    ) -> Void
-    
-    /// Just a `import CommonCrypto` would be great, but unfortunately this is still not possible.
-    /// So we use the only other sane method at this time to get access to CommonCrypto.
-    /// (Note: Since this is a lib, bridging headers are not supported.
-    /// Also modulemap files are error prone due to non relative file paths.)
-    ///
-    /// - Returns: A function pointer to CCHmac from libcommonCrypto
-    private static func loadHMACfromCommonCrypto() -> CCHmacFuncPtr
-    {
-        let libcc = dlopen("/usr/lib/system/libcommonCrypto.dylib", RTLD_NOW)
-        return unsafeBitCast(dlsym(libcc, "CCHmac"), to: CCHmacFuncPtr.self)
-    }
-}
-
-
 fileprivate extension URL
 {
     /// Transforms: "www.x.com?color=red&age=29" to ["color": "red", "age": "29"]
@@ -306,6 +249,3 @@ fileprivate extension URL
         return scheme + "://" + authority + host + port + self.path
     }
 }
-
-
-
